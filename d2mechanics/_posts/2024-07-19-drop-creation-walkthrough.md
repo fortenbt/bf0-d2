@@ -19,7 +19,7 @@ categories: d2mechanics
 
 {% capture unitseed %}<span style="color:green"><b>{{ unitseed }}</b></span>{% endcapture %}
 
-{% capture itemdataseed %}<span style="color:green"><b>ItemData Seed</b></span>{% endcapture %}
+{% capture itemdataseed %}<span style="color:green"><b>``ItemData Seed``</b></span>{% endcapture %}
 
 
 # Background
@@ -42,7 +42,7 @@ across these {{ d2title }} mechanics posts in order to provide the uninitiated
 with some context behind where this information is coming from as well as where
 to go to read up on all the great work that has already been done in the past
 by other groups. If you've already read any of my [other posts]({{ site.baseurl
-}}{% post_url d2mechanics/2024-05-15-drop-rng %}), feel free to skip down to
+}}/d2mechanics), feel free to skip down to
 the [Introduction section](#introduction).
 
 ## Changes
@@ -51,13 +51,12 @@ the [Introduction section](#introduction).
 
 ## Version
 
-The following information was derived from the project [D2MOO](https://github.com/ThePhrozenKeep/D2MOO), which has largely
-annotated most of the decompiled {{ d2title }} binaries. This project
-is based on {{ d2title }} version 1.10f, and thus may not be 100%
-accurate for D2R or the latest version of the original D2 Lord of
-Destruction, 1.14d. However, according to users more familiar with
-the differences, the main drop mechanics surrounding the RNG have
-not changed.
+The following information was derived from the project [D2MOO](
+https://github.com/ThePhrozenKeep/D2MOO), which has largely annotated most of the
+decompiled {{ d2title }} binaries. This project is based on {{ d2title }} version
+1.10f, and thus may not be 100% accurate for D2R or the latest version of the
+original D2 Lord of Destruction, 1.14d. However, according to users more familiar
+with the differences, the main drop mechanics surrounding the RNG have not changed.
 
 The RNG involved in drop mechanics of **online** {{ d2title }} games is
 currently unknown. A fairly reliable source who worked at Blizzard
@@ -88,9 +87,12 @@ understanding item and item property selection. Previous write ups that
 focus on exact item drop chances, how magic find affects the equations
 used to determine drop quality, and chest drop specifics can be found at:
 
-- [https://diablo2.diablowiki.net/Item_Generation_Tutorial](https://diablo2.diablowiki.net/Item_Generation_Tutorial)
-- [https://www.reddit.com/r/diablo2/comments/13u4tqv/how_does_magic_find_actually_work_an_advanced/](https://www.reddit.com/r/diablo2/comments/13u4tqv/how_does_magic_find_actually_work_an_advanced/)
-- [https://www.purediablo.com/forums/threads/guide-regular-special-and-sparkly-chests.380/](https://www.purediablo.com/forums/threads/guide-regular-special-and-sparkly-chests.380/)
+- [https://diablo2.diablowiki.net/Item_Generation_Tutorial](
+   https://diablo2.diablowiki.net/Item_Generation_Tutorial)
+- [https://www.reddit.com/r/diablo2/comments/13u4tqv/how_does_magic_find_actually_work_an_advanced/](
+   https://www.reddit.com/r/diablo2/comments/13u4tqv/how_does_magic_find_actually_work_an_advanced/)
+- [https://www.purediablo.com/forums/threads/guide-regular-special-and-sparkly-chests.380/](
+   https://www.purediablo.com/forums/threads/guide-regular-special-and-sparkly-chests.380/)
 
 This is not to say that this knowledge is new. Plenty of groups
 throughout the years have understood {{ d2title }}’s internals. When the
@@ -118,3 +120,64 @@ be happy to make corrections and credit you.
 
 # Introduction
 
+A dropped item in {{ d2title }} is represented in the game's code as a
+structure containing all the information required by the server to track
+that item as an individual item unique from all other items. It contains
+the item's location coordinates in the world, the item's level, a unique
+identifier, the quality level, and a host of other metadata about the item.
+This deep dive will list all the data about a dropped item and show exactly
+how that data was created.
+
+The drop we'll be exploring is one from a normal chest. While the normal
+chest object is just one of many places from which an item can be created,
+its codepath is very straightforward for beginning our walkthrough.
+
+## ``Object`` Vs. ``Item`` Vs. ``Unit``
+
+The terminology used above was carefully chosen to be accurate to and match
+that used in the D2MOO codebase. "Object" generally refers to those objects
+placed around the rooms and map areas in {{ d2title }}, while "Item" refers
+to anything that can be dropped by a monster or object. Examples of Objects
+include barrels, armor stands, rogue corpses, crates, wells, urns, etc.
+
+In the D2MOO codebase, both *Objects* and *Items* are "Units", where the
+Unit structure contains a field named ``UnitType`` that specifies if that
+Unit is of type ``OBJECT``, ``ITEM``, ``MONSTER``, or a few other various
+types. Besides the **type**, the Unit structure for the ``ITEM`` type keeps
+track of whether that item is in storage (inventory, cube, stash, etc.),
+equipped, in the belt rows, on the ground, under the cursor, currently
+being dropped, or socketed within another item. It holds what type of item
+it is (shield, armor, gold, weapon, potion, ring, et al) and the act from
+which the item was dropped. The Unit structure also stores the {{ unitseed }}
+and a pointer to a separate ``ItemData`` structure. The ``ItemData`` structure
+holds the Item's quality, the {{ itemdataseed }}, and flags specifying if the
+item is identified, ethereal, socketed, personalized, etc. It holds a
+timestamp for when the item was picked up from the ground, the item's level,
+all the affixes applied to the item, and a host of others we'll describe in
+detail at some point within this post.
+
+As you can see, there's a lot of stuff to keep track of for every object
+and every item drop.
+
+## Psuedo Random Number Generation
+
+I discussed the random number generation that {{ d2title }} uses in detail
+in my [RNG Within Diablo II Controlling Drop Mechanics]({{ site.baseurl
+}}{% post_url d2mechanics/2024-05-15-drop-rng %}) post, but this post
+wouldn't be complete without at least touching on it a bit here.
+
+### Video Game Random Numbers
+
+All video games use psuedo random number generation (PRNG). True random
+number generation is too time consuming and/or requires special hardware access
+to use, so games simply use an algorithm that produces a stream of numbers
+that are uniformly distributed in order to provide random chance. Typically,
+PRNG algorithms require a "first value"---called a "seed"---that selects
+a single stream of many random numbers. The algorithm used determines how
+long the stream of random numbers is before it begins to repeat. How many
+different streams there are is also determined by the algorithm and the size
+of the seed.
+
+{{ d2title }} uses a 32-bit seed and a multiply-with-carry pseudo random
+number generator algorithm. The algorithm used produces streams of uniformly
+distributed bits of length $$2^{64}$$
