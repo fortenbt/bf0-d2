@@ -285,6 +285,7 @@ kramdown:
   math_engine_opts:
     preview:           true
     preview_as_code:   true
+  auto_ids:            true
 
 compress_html:
   comments:            ['<!-- ', ' -->']
